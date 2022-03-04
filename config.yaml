@@ -1,0 +1,6 @@
+---
+  windows:
+    monitor_width: 2560
+    monitor_height: 1440
+  game:
+    window_name: "原神"
