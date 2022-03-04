@@ -227,7 +227,7 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description='Train a Fast R-CNN network')
     parser.add_argument('--size', default=(40,40), type=str2size)
-    parser.add_argument('--name', default='maze1', type=str)
+    parser.add_argument('--name', default='maze4', type=str)
 
     args = parser.parse_args()
     return args
