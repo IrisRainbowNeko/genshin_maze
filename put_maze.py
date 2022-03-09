@@ -27,6 +27,8 @@ def parse_args():
     return args
 
 if __name__ == '__main__':
+    cap_init()
+
     args = parse_args()
     #sx,sy=14,14
 

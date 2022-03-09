@@ -7,6 +7,7 @@ import cv2
 import networkx as nx
 import argparse
 import pickle
+from utils import *
 
 class Pos:
     def __init__(self,x: int,y: int):
@@ -62,76 +63,159 @@ class Wall(Pos):
     def __repr__(self):
         return f'Wall({self.x},{self.y} - {self.len},{self.dir})'
 
-class MazePP:
-    def __init__(self, size=(20,20), wall_len=5):
-        self.size=size
-        self.wall_len=wall_len
-        self.maze = np.zeros(size[::-1], dtype=np.uint8)
+class Cube(Pos):
+    rot_mats_dirs=[
+        np.eye(3),
+        rotate_mat(az, -90),
+        rotate_mat(az, -180),
+        rotate_mat(az, -270),
+        rotate_mat(ax, 90),
+        rotate_mat(ax, -90),
+    ]
 
-        self.wall_list=[]
-        self.placed_wall_list=[]
-        self.placed_coin_list=[]
+    rot_mats_rots = [
+        np.eye(3),
+        rotate_mat(ay, 90),
+        rotate_mat(ay, 180),
+        rotate_mat(ay, 270),
+    ]
+
+    def __init__(self, x: int, y: int, z: int, l: int, w: int, h: int, dir: int, rot: int):
+        self.data=np.array([x,y,z, l,w,h, dir,rot], dtype=int)
+
+    @property
+    def z(self):
+        return self.data[2]
+
+    @property
+    def l(self):
+        return self.data[3]
+
+    @property
+    def w(self):
+        return self.data[4]
+
+    @property
+    def h(self):
+        return self.data[5]
+
+    @property
+    def dir(self):
+        return self.data[6]
+
+    @property
+    def rot(self):
+        return self.data[7]
+
+    def get_cube(self): #朝上或向前 rot为0, dir:[↑→↓←上下]
+        # dir=0,rot=0 向前朝下
+        p1, p0=self.data[:3], np.array((self.l-1, -self.w+1, -self.h+1))
+        #p2 = np.dot(np.dot(p0[np.newaxis,:], Cube.rot_mats_dirs[self.dir]), Cube.rot_mats_rots[self.rot])[:]+p1
+        p2 = np.dot(np.dot(p0[np.newaxis,:], Cube.rot_mats_rots[self.rot]), Cube.rot_mats_dirs[self.dir])[:]+p1
+
+        p1, p2 = np.minimum(p1, p2), np.maximum(p1, p2)
+        return np.round(p1[0]).astype(int), np.round(p2[0]).astype(int)
+
+    def get_center(self):
+        p1, p2=self.get_cube()
+        return (p1+p2)/2
+
+class MazeBase:
+    def __init__(self, size):
+        self.size = np.array(size)
+
+        self.wall_list = []
+        self.placed_wall_list = []
+        self.placed_coin_list = []
 
     def can_place(self, wall):
-        rect=wall.get_rect()
-        if wall.dir%2==0:
-            if wall.dir==0:
-                if rect[1]>0:
-                    rect[1]-=1
-            else:
-                if rect[3]<self.size[1]-1:
-                    rect[3]+=1
-
-            if rect[0]>0:
-                rect[0]-=1
-            if rect[2] < self.size[0] - 1:
-                rect[2] += 1
-
-            for y in range(rect[1], rect[3]+1):
-                for x in range(rect[0], rect[2]+1):
-                    if y<0 or x<0 or y>=self.size[1] or x>=self.size[0] or self.maze[y, x]:
-                        return False
-            #if (wall.dir==0 and wall.y-wall.len>=0 and self.maze[wall.y-wall.len, x]) or (wall.dir==2 and wall.y+wall.len<self.size[1]-1 and self.maze[wall.y+wall.len, x]):
-            #    return False
-        else:
-            if wall.dir==1:
-                if rect[2] < self.size[0] - 1:
-                    rect[2]+=1
-            else:
-                if rect[0] > 0:
-                    rect[0]-=1
-
-            if rect[1] > 0:
-                rect[1] -= 1
-            if rect[3] < self.size[1] - 1:
-                rect[3] += 1
-
-            for y in range(rect[1], rect[3]+1):
-                for x in range(rect[0], rect[2]+1):
-                    if y<0 or x<0 or y>=self.size[1] or x>=self.size[0] or self.maze[y, x]:
-                        return False
-            #if (wall.dir==3 and wall.x-wall.len>=0 and self.maze[y, wall.x-wall.len]) or (wall.dir==1 and wall.x+wall.len<self.size[0]-1 and self.maze[y, wall.x+wall.len]):
-            #    return False
         return True
 
     def place_wall(self, wall):
-        rect = wall.get_rect()
+        pass
+
+    def get_next_states_list(self, wall):
+        pass
+
+    def generate(self):
+        pass
+
+    def generate_coins(self):
+        pass
+
+    def draw(self, size):
+        pass
+
+class Maze2D(MazeBase):
+    def __init__(self, size=(20, 20), wall_len=5):
+        super().__init__(size)
+        self.wall_len=wall_len
+        self.maze = np.zeros(size[::-1], dtype=np.uint8)
+        self.groups = np.zeros(size[::-1], dtype=np.uint8)
+        self.groups_data=[0]
+
+        self.dir_zero = [3,0,1,2]
+
+    def can_place(self, wall):
+        rect=np.array(wall.get_rect())
+
+        if (rect[:2]<0).any() or (rect[2:]>=self.size).any():
+            return False
+
+        pads = np.array([-1, -1, 1, 1])
+        pads[:2]=np.maximum(rect[:2]+pads[:2], 0)-rect[:2]
+        pads[2:]=np.minimum(rect[2:]+pads[2:], self.size-1)-rect[2:]
+        pads[self.dir_zero[wall.dir]]=0
+
+        rect+=pads
+        return not self.maze[rect[1]:rect[3]+1, rect[0]:rect[2]+1].any()
+
+    def place_wall(self, wall):
+        rect = np.array(wall.get_rect())
+
+        #成环检测
+        if wall.dir==0:
+            px, py = rect[0], rect[3]+1
+        elif wall.dir == 1:
+            px, py = rect[0]-1, rect[1]
+        elif wall.dir == 2:
+            px, py = rect[0], rect[1]-1
+        elif wall.dir == 3:
+            px, py = rect[2]+1, rect[3]
+
+        if px not in range(0,self.size[0]) or py not in range(0,self.size[1]) or self.groups[py, px]==0:
+            self.groups[rect[1]:rect[3] + 1, rect[0]:rect[2] + 1] = len(self.groups_data)
+            self.groups_data.append(0)
+        else:
+            if self.groups_data[self.groups[py, px]]==1:
+                return
+            else:
+                self.groups[rect[1]:rect[3] + 1, rect[0]:rect[2] + 1] = self.groups[py, px]
+                if (rect[:2]<=0).any() or (rect[2:]>=self.size-1).any():
+                    self.groups_data[self.groups[py, px]] = 1
+
         self.maze[rect[1]:rect[3]+1, rect[0]:rect[2]+1]=1
         self.placed_wall_list.append(wall)
 
     def get_next_states_list(self, wall):
         wall_list=[]
+        def add_dirs(x, y):
+            for d in range(4):
+                wall_list.append(Wall(x, y, self.wall_len, d))
+
         rect = wall.get_rect()
         if rect[0]==rect[2]:
             for y in range(rect[1], rect[3]+1):
-                for d in range(4):
-                    wall_list.append(Wall(rect[0]-1, y, self.wall_len, d))
-                    wall_list.append(Wall(rect[0]+1, y, self.wall_len, d))
+                add_dirs(rect[0]-1, y)
+                add_dirs(rect[0]+1, y)
+            add_dirs(rect[0], rect[1]-1)
+            add_dirs(rect[0], rect[3]+1)
         else:
             for x in range(rect[0], rect[2]+1):
-                for d in range(4):
-                    wall_list.append(Wall(x, rect[1]-1, self.wall_len, d))
-                    wall_list.append(Wall(x, rect[1]+1, self.wall_len, d))
+                add_dirs(x, rect[1]-1)
+                add_dirs(x, rect[1]+1)
+            add_dirs(rect[0]-1, rect[1])
+            add_dirs(rect[2]+1, rect[1])
         wall_list=list(filter(lambda w: self.can_place(w), wall_list))
         return wall_list
 
@@ -167,15 +251,6 @@ class MazePP:
 
         self.placed_coin_list=random.sample(available_list, min(10, len(available_list)))
 
-    def get_unit_pos_list(self) -> List[Pos]:
-        raw = list(range(0, self.size[0]*self.size[1]))
-        raw = np.array(random.sample(raw, 10))
-        X = np.mod(raw, self.size[0])
-        Y = raw // self.size[0]
-
-        #X, Y = np.meshgrid(x, y)
-        return [Pos(*pos) for pos in zip(X.reshape(-1).tolist(),Y.reshape(-1).tolist())]
-
     def draw(self, size=(400,400)):
         img=np.stack([self.maze,self.maze,self.maze], axis=-1)
 
@@ -187,6 +262,103 @@ class MazePP:
         img=cv2.resize(img, size, interpolation=cv2.INTER_NEAREST)
 
         return img
+
+class Maze3D(MazeBase):
+    def __init__(self, size=(40, 40, 18), wall_size=(1, 5, 5)):
+        super().__init__(size)
+        self.wall_size=wall_size
+        self.maze = np.zeros(size, dtype=np.uint8)
+
+        self.dir_zero=[4,0,1,3,2,5]
+
+    def can_place(self, wall: Cube):
+        p1, p2 = wall.get_cube()
+
+        if (p1 < 0).any() or (p2 >= self.size).any():
+            return False
+
+        pads=np.array([-1,-1,-4, 1,1,4])
+        pads[:3] = np.maximum(p1 + pads[:3], 0) - p1
+        pads[3:] = np.minimum(p2 + pads[3:], self.size - 1) - p2
+        pads[self.dir_zero[wall.dir]]=0
+        if p1[2]!=p2[2]:
+            pads[2] = 0
+            pads[5] = 0
+
+        p1 += pads[:3]
+        p2 += pads[3:]
+        return not self.maze[p1[0]:p2[0]+1, p1[1]:p2[1]+1, p1[2]:p2[2]+1].any()
+
+    def place_wall(self, wall):
+        p1, p2 = wall.get_cube()
+        self.maze[p1[0]:p2[0]+1, p1[1]:p2[1]+1, p1[2]:p2[2]+1]=1
+        self.placed_wall_list.append(wall)
+
+    def get_next_states_list(self, wall: Cube):
+        wall_list = []
+
+        def add_dirs(x, y, z, dir):
+            for r in range(4):
+                wall_list.append(Cube(x, y, z, *self.wall_size, dir, r))
+
+        p1, p2 = wall.get_cube()
+        if p1[0] == p2[0]:
+            for y in range(p1[1], p2[1] + 1):
+                for z in range(p1[2], p2[2] + 1):
+                    add_dirs(p1[0]-1, y, z, 3)
+                    add_dirs(p1[0]+1, y, z, 1)
+        elif p1[1] == p2[1]:
+            for x in range(p1[0], p2[0] + 1):
+                for z in range(p1[2], p2[2] + 1):
+                    add_dirs(x, p1[1]-1, z, 0)
+                    add_dirs(x, p1[1]+1, z, 2)
+        elif p1[2] == p2[2]:
+            for x in range(p1[0], p2[0] + 1):
+                for y in range(p1[1], p2[1] + 1):
+                    add_dirs(x, y, p1[2]-1, 4)
+                    add_dirs(x, y, p1[2]+1, 5)
+        wall_list = list(filter(lambda w: self.can_place(w), wall_list))
+        return wall_list
+
+    def generate(self):
+        def inter_gene():
+            while len(self.wall_list)>0:
+                wall=self.wall_list.pop(random.randint(0,len(self.wall_list)-1))
+                if self.can_place(wall):
+                    self.place_wall(wall)
+                    self.wall_list.extend(self.get_next_states_list(wall))
+        for i in range(3):
+            self.wall_list.append(Cube(np.random.randint(0,self.size[0]-1), np.random.randint(0,self.size[1]-1), np.random.randint(0,self.size[2]-1), *self.wall_size, np.random.randint(0, 6), np.random.randint(0, 4)))
+        inter_gene()
+        for i in range(1000):
+            self.wall_list.append(Cube(np.random.randint(0,self.size[0]-1), np.random.randint(0,self.size[1]-1), np.random.randint(0,self.size[2]-1), *self.wall_size, np.random.randint(0, 6), np.random.randint(0, 4)))
+        inter_gene()
+
+    def draw(self, size):
+
+        def get_cube_list(p1, p2):
+            p2=p2+1
+            return [p1[0],p2[0], p1[1],p2[1], p1[2],p2[2]]
+
+        cube_actors=[vtk_cube(bounds=get_cube_list(*wall.get_cube())) for wall in self.placed_wall_list]
+        print(len(cube_actors))
+
+        renderer = vtk.vtkRenderer()
+        renderer.SetBackground(0.0, 0.0, 0.0)  # 背景只有一个所以是Set()
+        for cube_actor in cube_actors:
+            renderer.AddActor(cube_actor)  # 因为actor有可能为多个所以是add()
+
+        # 5. 显示渲染窗口
+        render_window = vtk.vtkRenderWindow()
+        render_window.SetWindowName("My First Cube")
+        render_window.SetSize(800, 800)
+        render_window.AddRenderer(renderer)  # 渲染也会有可能有多个渲染把他们一起显示
+        # 6. 创建交互控键（可以用鼠标拖来拖去看三维模型）
+        interactor = vtk.vtkRenderWindowInteractor()
+        interactor.SetRenderWindow(render_window)
+        interactor.Initialize()
+        render_window.Render()
+        interactor.Start()
 
 def find_longest_path(maze, num=10):
     poses = np.where(maze.maze==0)
@@ -226,7 +398,7 @@ def parse_args():
         return tuple(int(x) for x in v.strip().split('x'))
 
     parser = argparse.ArgumentParser(description='Train a Fast R-CNN network')
-    parser.add_argument('--size', default=(40,40), type=str2size)
+    parser.add_argument('--size', default=(40,40,40), type=str2size)
     parser.add_argument('--name', default='maze4', type=str)
 
     args = parser.parse_args()
@@ -235,15 +407,16 @@ def parse_args():
 if __name__ == '__main__':
     args=parse_args()
 
-    maze=MazePP(size=args.size)
+    maze=Maze3D(size=args.size)
     #maze.maze[12:12+5, :5]=1
     maze.generate()
-    maze.generate_coins()
-    se=find_longest_path(maze, num=1000)
-    print(se)
-    img=maze.draw()
-    cv2.imshow('aa', img)
-    cv2.waitKey()
+    maze.draw(1)
+    #maze.generate_coins()
+    #se=find_longest_path(maze, num=1000)
+    #print(se)
+    #img=maze.draw()
+    #cv2.imshow('aa', img)
+    #cv2.waitKey()
 
     with open(f"{args.name}.pkl", "wb") as f:
         pickle.dump({'wall': maze.placed_wall_list, 'coin':maze.placed_coin_list}, f)
