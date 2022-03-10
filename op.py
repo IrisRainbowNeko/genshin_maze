@@ -1,12 +1,19 @@
 from pymouse import PyMouse
 import numpy as np
 import time
+import keyboard
 
 wait_time=0.1
 
 mouse = PyMouse()
 put_center = np.array([960,540]) #默认摆放位置
 rot_offset=np.array([0,194]) #旋转条偏移
+
+def type_key(key):
+    keyboard.press(key)
+    time.sleep(wait_time)
+    keyboard.release(key)
+    time.sleep(wait_time)
 
 def press(pos):
     mouse.press(int(pos[0]), int(pos[1]))

@@ -277,7 +277,7 @@ class Maze3D(MazeBase):
         if (p1 < 0).any() or (p2 >= self.size).any():
             return False
 
-        pads=np.array([-1,-1,-4, 1,1,4])
+        pads=np.array([-1,-1,-2, 1,1,2])
         pads[:3] = np.maximum(p1 + pads[:3], 0) - p1
         pads[3:] = np.minimum(p2 + pads[3:], self.size - 1) - p2
         pads[self.dir_zero[wall.dir]]=0
@@ -333,6 +333,20 @@ class Maze3D(MazeBase):
         for i in range(1000):
             self.wall_list.append(Cube(np.random.randint(0,self.size[0]-1), np.random.randint(0,self.size[1]-1), np.random.randint(0,self.size[2]-1), *self.wall_size, np.random.randint(0, 6), np.random.randint(0, 4)))
         inter_gene()
+
+    def generate_coins(self):
+        available_list=[]
+        for z in range(1, self.size[2] - 2):
+            for y in range(1,self.size[1]-2):
+                for x in range(1,self.size[0]-2):
+                    if (self.maze[x:x+2, y:y+2, z:z+2]==0).all():
+                        for coin in available_list:
+                            if not (coin[0]>=x+2 or coin[0]+2<=x or coin[1]>=y+2 or coin[1]+2<=y or coin[2]>=z+2 or coin[2]+2<=z):
+                                break
+                        else:
+                            available_list.append([x,y,z])
+
+        self.placed_coin_list=random.sample(available_list, min(30, len(available_list)))
 
     def draw(self, size):
 
@@ -398,8 +412,8 @@ def parse_args():
         return tuple(int(x) for x in v.strip().split('x'))
 
     parser = argparse.ArgumentParser(description='Train a Fast R-CNN network')
-    parser.add_argument('--size', default=(40,40,40), type=str2size)
-    parser.add_argument('--name', default='maze4', type=str)
+    parser.add_argument('--size', default=(40,40,25), type=str2size)
+    parser.add_argument('--name', default='maze3D_2', type=str)
 
     args = parser.parse_args()
     return args
@@ -411,7 +425,7 @@ if __name__ == '__main__':
     #maze.maze[12:12+5, :5]=1
     maze.generate()
     maze.draw(1)
-    #maze.generate_coins()
+    maze.generate_coins()
     #se=find_longest_path(maze, num=1000)
     #print(se)
     #img=maze.draw()
@@ -419,4 +433,4 @@ if __name__ == '__main__':
     #cv2.waitKey()
 
     with open(f"{args.name}.pkl", "wb") as f:
-        pickle.dump({'wall': maze.placed_wall_list, 'coin':maze.placed_coin_list}, f)
+        pickle.dump({'wall': maze.placed_wall_list, 'coin':maze.placed_coin_list, 'maze': maze.maze}, f)
